@@ -1,0 +1,416 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>دليل أسعار الأصناف والمستلزمات - مكتب الريان</title>
+    <!-- مكتبة قراءة ملفات PDF تلقائياً -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+    <style>
+        :root {
+            --primary: #0f766e;
+            --primary-light: #14b8a6;
+            --bg: #f1f5f9;
+            --card: #ffffff;
+            --text: #1e293b;
+        }
+        * { box-sizing: border-box; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+        body { background-color: var(--bg); color: var(--text); margin: 0; padding: 20px; display: flex; justify-content: center; }
+        .container { width: 100%; max-width: 650px; background: var(--card); padding: 25px; border-radius: 16px; box-shadow: 0 10px 25px rgba(0,0,0,0.08); }
+        h1 { text-align: center; color: var(--primary); margin-top: 0; font-size: 1.5rem; }
+        .stats { text-align: center; font-size: 0.9rem; color: #64748b; margin-bottom: 20px; }
+        
+        /* مربع البحث */
+        .search-wrapper { position: relative; margin-bottom: 20px; }
+        .search-input {
+            width: 100%; padding: 15px 20px; font-size: 1.1rem;
+            border: 2px solid #cbd5e1; border-radius: 12px; outline: none;
+            transition: 0.2s; background: #f8fafc;
+        }
+        .search-input:focus { border-color: var(--primary); background: #fff; box-shadow: 0 0 0 4px rgba(15, 118, 110, 0.1); }
+        .clear-btn {
+            position: absolute; left: 15px; top: 50%; transform: translateY(-50%);
+            background: #e2e8f0; border: none; width: 28px; height: 28px;
+            border-radius: 50%; cursor: pointer; display: none; font-weight: bold; color: #475569;
+        }
+
+        /* القائمة المتوقعة (Autocomplete) */
+        .suggestions {
+            position: absolute; top: 100%; right: 0; left: 0; background: #fff;
+            border: 1px solid #cbd5e1; border-radius: 12px; max-height: 300px;
+            overflow-y: auto; z-index: 100; box-shadow: 0 10px 20px rgba(0,0,0,0.1);
+            margin-top: 5px; display: none;
+        }
+        .suggestion-item {
+            padding: 12px 16px; border-bottom: 1px solid #f1f5f9; cursor: pointer;
+            display: flex; justify-content: space-between; align-items: center; transition: 0.15s;
+        }
+        .suggestion-item:hover { background-color: #f0fdfa; }
+        .suggestion-name { font-weight: 600; color: #0f172a; }
+        .suggestion-badge { font-size: 0.85rem; background: #e2e8f0; padding: 3px 8px; border-radius: 6px; color: #334155; }
+
+        /* بطاقة عرض السعر */
+        .result-card {
+            background: linear-gradient(135deg, #0f766e, #0d9488); color: white;
+            padding: 22px; border-radius: 14px; display: none; margin-top: 15px;
+            box-shadow: 0 8px 16px rgba(15, 118, 110, 0.2); animation: fadeIn 0.25s ease;
+        }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: translateY(0); } }
+        .item-title { font-size: 1.3rem; font-weight: bold; margin-bottom: 18px; text-align: center; border-bottom: 1px solid rgba(255,255,255,0.2); padding-bottom: 12px; }
+        .prices-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; text-align: center; }
+        .price-box { background: rgba(255,255,255,0.15); padding: 12px; border-radius: 10px; backdrop-filter: blur(5px); }
+        .price-label { font-size: 0.85rem; opacity: 0.9; margin-bottom: 6px; display: block; }
+        .price-value { font-size: 1.35rem; font-weight: bold; }
+
+        /* قسم رفع وتحديث ملف الـ PDF */
+        .upload-section {
+            margin-top: 25px; padding-top: 20px; border-top: 1px dashed #cbd5e1;
+            text-align: center;
+        }
+        .upload-label {
+            display: inline-block; background: #f8fafc; border: 1px solid #94a3b8;
+            color: #334155; padding: 8px 16px; border-radius: 8px; cursor: pointer;
+            font-size: 0.9rem; transition: 0.2s;
+        }
+        .upload-label:hover { background: #e2e8f0; }
+        #pdfUpload { display: none; }
+        #statusMsg { font-size: 0.85rem; color: var(--primary); margin-top: 8px; font-weight: 600; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>🔍 الاستعلام السريع عن أسعار الأصناف</h1>
+    <div class="stats" id="itemCount">جاري تحميل الأصناف...</div>
+
+    <div class="search-wrapper">
+        <input type="text" id="searchInput" class="search-input" placeholder="اكتب اسم الصنف هنا (مثال: ايفا، بامبرز، فاتيكا، ترمومتر...)" autocomplete="off">
+        <button class="clear-btn" id="clearBtn" title="مسح">✕</button>
+        <div class="suggestions" id="suggestionsBox"></div>
+    </div>
+
+    <div class="result-card" id="resultCard">
+        <div class="item-title" id="resName">اسم الصنف</div>
+        <div class="prices-grid">
+            <div class="price-box">
+                <span class="price-label">سعر الصيدلي</span>
+                <span class="price-value" id="resPharm">0.00</span> <small>ج.م</small>
+            </div>
+            <div class="price-box">
+                <span class="price-label">سعر الجمهور</span>
+                <span class="price-value" id="resPub">0.00</span> <small>ج.م</small>
+            </div>
+            <div class="price-box">
+                <span class="price-label">الربح والفرق</span>
+                <span class="price-value" id="resProfit">0.00</span> <small>ج.م</small>
+            </div>
+        </div>
+    </div>
+
+    <div class="upload-section">
+        <label for="pdfUpload" class="upload-label">📄 قراءة كافة صفحات ملف الـ PDF أو تحديث القائمة</label>
+        <input type="file" id="pdfUpload" accept="application/pdf">
+        <div id="statusMsg"></div>
+    </div>
+</div>
+
+<script>
+// عينة كبيرة مدمجة من ملف مكتب الريان تعمل فوراً
+const initialProducts = [
+    { name: "ماكياج كريم اساس بخاخ كيكو", pharm: 125.00, pub: 175 },
+    { name: "اكتف مان فوم", pharm: 39.75, pub: 50 },
+    { name: "ابره بزور", pharm: 3.50, pub: 10 },
+    { name: "اكس استيك مستورد 185 جم", pharm: 206.17, pub: 230 },
+    { name: "البرهان زيت مل 100 اخضر", pharm: 117.55, pub: 130 },
+    { name: "البرهان زيت مل 100 ازرق", pharm: 117.55, pub: 130 },
+    { name: "اختبار تحليل مخدرات رباعي", pharm: 32.86, pub: 50 },
+    { name: "اختبار تحليل مخدرات سباعي", pharm: 44.00, pub: 100 },
+    { name: "اختبار حمل بيبي تشيك بلاس", pharm: 5.90, pub: 15 },
+    { name: "اختبار حمل بيبي تشيك عادي", pharm: 2.37, pub: 5 },
+    { name: "اختبار حمل في الدم", pharm: 10.25, pub: 18 },
+    { name: "اختبار حمل هابي تيست جمهور 30 ج", pharm: 14.00, pub: 35 },
+    { name: "ارجنتو غسول للوجه 200 1+1 مل", pharm: 325.10, pub: 400 },
+    { name: "از هي لوشن عرض 2 ق 100 مل", pharm: 174.90, pub: 220 },
+    { name: "اسبلاش جلامور 200 مل", pharm: 90.10, pub: 115 },
+    { name: "استيفر كريم مرطب للوجه بالكولاجين 283 جم", pharm: 430.00, pub: 520 },
+    { name: "اسيتون ايفا ازرق", pharm: 40.81, pub: 50 },
+    { name: "اسيتون ايفا خوخ", pharm: 28.62, pub: 35 },
+    { name: "افريقانا شامبو وبلسم 225 مل", pharm: 117.00, pub: 140 },
+    { name: "افريقانا لوشن جود جيرل 250 مل", pharm: 126.25, pub: 190 },
+    { name: "افوفا بدي اسبلاش 55 مل باشون فروت", pharm: 25.25, pub: 40 },
+    { name: "افوفا سويت 100 جم جوز هند", pharm: 24.33, pub: 35 },
+    { name: "الو ايفا بديل الزيت شعر بالصبار 250 مل", pharm: 67.84, pub: 80 },
+    { name: "الو ايفا شامبو ارجان 250 مل", pharm: 63.60, pub: 75 },
+    { name: "الو ايفا كريم شعر صبار كبير", pharm: 71.50, pub: 85 },
+    { name: "الو ايفا كريم شعر صبار وسط", pharm: 41.75, pub: 55 },
+    { name: "اليجون لوشن تفتيح بدى ميلك 200", pharm: 265.68, pub: 246 },
+    { name: "انشانتر شاور 500 مل", pharm: 226.82, pub: 250 },
+    { name: "انشانتر لوشن ورد 250 مل", pharm: 190.00, pub: 210 },
+    { name: "انفينتي رول اون عرض 2 ق تفتيح فروتي", pharm: 157.64, pub: 175 },
+    { name: "انفينتي كريم تفتيح 60 جم عرض 2 ق", pharm: 108.00, pub: 125 },
+    { name: "اوف سبراي", pharm: 165.00, pub: 185 },
+    { name: "اولد سبايس استيك اورجينال 50 مل", pharm: 217.30, pub: 250 },
+    { name: "اولويز حساس دوبل ازرق طويل جدا", pharm: 44.50, pub: 60 },
+    { name: "اولويز الترا فردي احمر طويل", pharm: 35.25, pub: 55 },
+    { name: "املا زيت 180 مل دهبي", pharm: 78.17, pub: 95 },
+    { name: "املا زيت 180 مل عادي", pharm: 74.90, pub: 90 },
+    { name: "املا شامبو 200 مل", pharm: 43.25, pub: 70 },
+    { name: "انجرام كريم حلاقة ازرق 40 جم", pharm: 31.25, pub: 40 },
+    { name: "انجرام كريم حلاقة اخضر 40 جم", pharm: 29.62, pub: 40 },
+    { name: "ايفا بادي سبلاش 240 مل كوزي دريم", pharm: 154.00, pub: 175 },
+    { name: "ايفا بلسم ارجان جولد", pharm: 122.00, pub: 140 },
+    { name: "ايفا بودرة سموكرز بالقرنفل", pharm: 39.95, pub: 60 },
+    { name: "ايفا سبوتلس كريم انبوبة", pharm: 17.50, pub: 25 },
+    { name: "ايفا صن بلوك جولد ارجان", pharm: 183.78, pub: 220 },
+    { name: "ايفا غسول للوجه بالكولاجين 150 مل", pharm: 99.83, pub: 115 },
+    { name: "ايفا غسول للوجه جلسرين", pharm: 45.75, pub: 60 },
+    { name: "ايفا كريم بشره عسل عائلي", pharm: 46.11, pub: 60 },
+    { name: "ايفا كريم بشره جلسرين كبير", pharm: 54.85, pub: 60 },
+    { name: "ايفا كولاجين + 30", pharm: 195.50, pub: 220 },
+    { name: "ايفا كولاجين + 40", pharm: 186.91, pub: 215 },
+    { name: "بابلز ببرونة 180 مل بدون يد", pharm: 118.00, pub: 150 },
+    { name: "باراشوت زيت جوز هند 170 مل مستورد", pharm: 116.00, pub: 130 },
+    { name: "بارودونتكس معجون فلوريد 100 مل", pharm: 110.25, pub: 150 },
+    { name: "بالمرز كريم برطمان اصفر", pharm: 148.95, pub: 165 },
+    { name: "بامبرز بانتس رقم 3", pharm: 367.50, pub: 395 },
+    { name: "بامبرز بانتس رقم 4", pharm: 377.65, pub: 400 },
+    { name: "بامبرز رقم 2", pharm: 305.50, pub: 350 },
+    { name: "بامبرز رقم 3", pharm: 357.00, pub: 400 },
+    { name: "بامبرز رقم 4", pharm: 357.00, pub: 400 },
+    { name: "بانتين بديل الزيت 275 مل انسيابي", pharm: 154.00, pub: 240 },
+    { name: "بانتين شامبو 400 مل تساقط", pharm: 155.00, pub: 175 },
+    { name: "باندولين شامبو كيرلي", pharm: 162.70, pub: 250 },
+    { name: "باندولين كريم شيا", pharm: 134.09, pub: 150 },
+    { name: "برايفت الترا دبل ليلي", pharm: 47.50, pub: 70 },
+    { name: "بلاستر جروح مدور 100 ق", pharm: 21.75, pub: 35 },
+    { name: "بلوب حمام كريم ارجان 1 ك", pharm: 92.75, pub: 120 },
+    { name: "بليس شامبو احمر زيرو سالفات", pharm: 97.52, pub: 110 },
+    { name: "بوبانا غسول وجه بالفحم 150 مل", pharm: 41.50, pub: 60 },
+    { name: "بوبانا كريم تفتيح بشرة حساسة 60 جم", pharm: 27.50, pub: 50 },
+    { name: "بوباي صن سكرين اطفال 200 مل", pharm: 117.00, pub: 135 },
+    { name: "بيبي جوي رقم 2", pharm: 288.50, pub: 350 },
+    { name: "بيبي جوي شورت مقاس 4", pharm: 298.70, pub: 350 },
+    { name: "بيبي جوي شورت مقاس 5", pharm: 305.50, pub: 350 },
+    { name: "بيزلين رول اون عطر الورد", pharm: 425.00, pub: 465 },
+    { name: "ترمومتر ديجيتال برايم", pharm: 38.00, pub: 45 },
+    { name: "ترمومتر ديجيتال جرانزيا", pharm: 63.60, pub: 70 },
+    { name: "ثري ايز رباط ضاغط 10 سم", pharm: 12.09, pub: 15 },
+    { name: "ثري ايز رباط ضاغط 15 سم", pharm: 18.14, pub: 24 },
+    { name: "جليسوليد كريم 40 جم", pharm: 36.28, pub: 42 },
+    { name: "جهاز سكر كير سينس", pharm: 333.90, pub: 400 },
+    { name: "جهاز ضغط جرانزيا التيزا برو بالشاحن", pharm: 1030.00, pub: 1800 },
+    { name: "جهاز ضغط زئبق البك 2", pharm: 2268.00, pub: 2800 },
+    { name: "جهاز نيبولايزر جرانزيا كومباتو", pharm: 1065.00, pub: 1500 },
+    { name: "جونسون شامبو 200 مل اصفر", pharm: 75.00, pub: 120 },
+    { name: "جونسون زيت لافندر 200 مل", pharm: 95.40, pub: 105 },
+    { name: "دوف شامبو 600 مل اصلاح مكثف", pharm: 166.95, pub: 220 },
+    { name: "ديرما اكتف اكتي كلير كريم جل 50 مل", pharm: 145.75, pub: 200 },
+    { name: "ريكسونا بلية حريمي كبير شاور فريش", pharm: 56.00, pub: 75 },
+    { name: "سانوسان شامبو + شاور 200 مل", pharm: 212.00, pub: 235 },
+    { name: "سانوسان كريم الحفاضات 150 مل", pharm: 412.50, pub: 550 },
+    { name: "سباركل شامبو 400 مل اسود", pharm: 50.25, pub: 65 },
+    { name: "ستارفيل رول اون لبني لتأخير نمو الشعر", pharm: 129.26, pub: 155 },
+    { name: "ستارفيل غسول 200 مل 1+1 بشره دهنيه", pharm: 181.26, pub: 200 },
+    { name: "ستارفيل كريم تفتيح 60 جم", pharm: 93.70, pub: 130 },
+    { name: "ستارفيل كريم حب الشباب 60 جم", pharm: 62.00, pub: 75 },
+    { name: "سرنجات الدولية 3 سم كبار ع 250", pharm: 315.88, pub: 400 },
+    { name: "سرنجات الدولية 5 سم ع 200", pharm: 328.60, pub: 370 },
+    { name: "سنسوداين 50 مل فلورايد وسط", pharm: 63.25, pub: 75 },
+    { name: "سنسوداين 75 مل رابيد اكشن", pharm: 162.18, pub: 200 },
+    { name: "سودو كريم صغير 60 جم", pharm: 183.50, pub: 210 },
+    { name: "سيجنال كبير عادي 120 مل", pharm: 41.42, pub: 50 },
+    { name: "سيرافي غسول للبشره اخضر 236 مل", pharm: 550.00, pub: 890 },
+    { name: "شان جيل مرطب 120 جم", pharm: 136.50, pub: 170 },
+    { name: "شان غسول جل للبشره 250 مل", pharm: 126.00, pub: 175 },
+    { name: "شرايط سكر اكوا تشيك انستانت", pharm: 530.00, pub: 650 },
+    { name: "شرايط سكر بايو تيست", pharm: 230.00, pub: 300 },
+    { name: "صابون ديتول 115 جم اخضر", pharm: 27.25, pub: 35 },
+    { name: "صابون ستارفيل 100 جم حب الشباب", pharm: 46.90, pub: 60 },
+    { name: "صن سيلك شامبو 600 مل اسود", pharm: 114.00, pub: 140 },
+    { name: "غارنيه صبغه اسود 1", pharm: 105.00, pub: 140 },
+    { name: "غارنيه ماء ميسلار منظف بمبي 400 مل", pharm: 228.00, pub: 350 },
+    { name: "فاتيكا حمام كريم كبير 1 كيلو بالارجان", pharm: 120.57, pub: 145 },
+    { name: "فاتيكا شامبو 360 مل ضد القشره", pharm: 68.68, pub: 85 },
+    { name: "فاتيكا كريم كبير ارجان", pharm: 68.50, pub: 85 },
+    { name: "فاين بيبي رقم 4", pharm: 339.90, pub: 400 },
+    { name: "فيبكس 25 مل كبير ازرق", pharm: 58.25, pub: 75 },
+    { name: "فيم فريش غسول 250 مل برتقالي", pharm: 343.80, pub: 380 },
+    { name: "كارسيل حمام كريم برطمان 500 ملي", pharm: 593.60, pub: 800 },
+    { name: "كانيولا 20 بمبي", pharm: 6.89, pub: 10 },
+    { name: "كانيولا 22 ازرق", pharm: 6.00, pub: 15 },
+    { name: "كانيولا 24 اصفر", pharm: 6.70, pub: 14 },
+    { name: "كحول سيجما سبراي 1 لتر", pharm: 59.40, pub: 80 },
+    { name: "كلير شامبو رجالي 360 مل فحم", pharm: 116.00, pub: 135 },
+    { name: "لوريال شامبو 400 مل هيالورنيك", pharm: 130.17, pub: 170 },
+    { name: "لونا كريم تشققات كبير", pharm: 38.70, pub: 60 },
+    { name: "مولفكس بانتس رقم 4", pharm: 369.00, pub: 420 },
+    { name: "مولفكس رقم 3", pharm: 365.65, pub: 400 },
+    { name: "نيفيا بليه حريمي بلاك اند وايت", pharm: 66.00, pub: 85 },
+    { name: "نيفيا سوفت 200 مل ازرق", pharm: 83.70, pub: 110 },
+    { name: "هيد اند شولدرز شامبو 400 مل نعناع", pharm: 175.00, pub: 240 },
+    { name: "هيمالايا غسول النيم لتنقية الوجه 50 مل", pharm: 46.83, pub: 60 }
+];
+
+// تحميل البيانات من الذاكرة المحلية أو استخدام القائمة المدمجة
+let products = JSON.parse(localStorage.getItem('pharmacy_products')) || initialProducts;
+
+const searchInput = document.getElementById('searchInput');
+const suggestionsBox = document.getElementById('suggestionsBox');
+const resultCard = document.getElementById('resultCard');
+const clearBtn = document.getElementById('clearBtn');
+const itemCount = document.getElementById('itemCount');
+
+function updateCounter() {
+    itemCount.textContent = `إجمالي الأصناف المسجلة حالياً: ${products.length} صنف`;
+}
+updateCounter();
+
+// دالة توحيد الحروف العربية والأرقام لتسهيل البحث
+function normalizeArabic(text) {
+    if (!text) return "";
+    const easternDigits = ['٠','١','٢','٣','٤','٥','٦','٧','٨','٩'];
+    let res = text.toString();
+    easternDigits.forEach((d, i) => { res = res.replace(new RegExp(d, 'g'), i); });
+    return res
+        .replace(/[أإآ]/g, 'ا')
+        .replace(/ة/g, 'ه')
+        .replace(/ى/g, 'ي')
+        .replace(/ئ/g, 'ي')
+        .replace(/\s+/g, ' ')
+        .trim()
+        .toLowerCase();
+}
+
+// البحث وإظهار التوقعات
+searchInput.addEventListener('input', function() {
+    const query = normalizeArabic(this.value);
+    suggestionsBox.innerHTML = '';
+    
+    if (this.value.length > 0) {
+        clearBtn.style.display = 'block';
+    } else {
+        clearBtn.style.display = 'none';
+        suggestionsBox.style.display = 'none';
+        return;
+    }
+
+    const words = query.split(' ').filter(w => w.length > 0);
+    const matches = products.filter(p => {
+        const normName = normalizeArabic(p.name);
+        return words.every(w => normName.includes(w));
+    }).slice(0, 30); // إظهار أول 30 نتيجة متطابقة للسرعة
+
+    if (matches.length > 0) {
+        matches.forEach(item => {
+            const div = document.createElement('div');
+            div.className = 'suggestion-item';
+            div.innerHTML = `
+                <span class="suggestion-name">${item.name}</span>
+                <span class="suggestion-badge">جمهور: ${item.pub} ج</span>
+            `;
+            div.addEventListener('click', () => selectProduct(item));
+            suggestionsBox.appendChild(div);
+        });
+        suggestionsBox.style.display = 'block';
+    } else {
+        suggestionsBox.innerHTML = '<div class="suggestion-item">لا توجد نتائج مطابقة</div>';
+        suggestionsBox.style.display = 'block';
+    }
+});
+
+// عرض تفاصيل الصنف عند الضغط عليه
+function selectProduct(item) {
+    searchInput.value = item.name;
+    suggestionsBox.style.display = 'none';
+    
+    document.getElementById('resName').textContent = item.name;
+    document.getElementById('resPharm').textContent = Number(item.pharm).toFixed(2);
+    document.getElementById('resPub').textContent = Number(item.pub).toFixed(2);
+    
+    const profit = (Number(item.pub) - Number(item.pharm)).toFixed(2);
+    document.getElementById('resProfit').textContent = profit;
+    
+    resultCard.style.display = 'block';
+}
+
+clearBtn.addEventListener('click', () => {
+    searchInput.value = '';
+    clearBtn.style.display = 'none';
+    suggestionsBox.style.display = 'none';
+    resultCard.style.display = 'none';
+    searchInput.focus();
+});
+
+// إخفاء القائمة عند الضغط خارجها
+document.addEventListener('click', (e) => {
+    if (!e.target.closest('.search-wrapper')) {
+        suggestionsBox.style.display = 'none';
+    }
+});
+
+// ميزة استخراج كافة الأصناف من ملف الـ PDF مباشرة في المتصفح
+pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+document.getElementById('pdfUpload').addEventListener('change', async function(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    const statusMsg = document.getElementById('statusMsg');
+    statusMsg.textContent = '⏳ جاري قراءة جميع صفحات الملف واستخراج الأسعار...';
+
+    try {
+        const arrayBuffer = await file.arrayBuffer();
+        const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+        let extracted = [];
+
+        for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
+            const page = await pdf.getPage(pageNum);
+            const textContent = await page.getTextContent();
+            
+            // تجميع العناصر حسب السطر (الإحداثي Y)
+            let rows = {};
+            textContent.items.forEach(item => {
+                const y = Math.round(item.transform[5] / 4) * 4;
+                if (!rows[y]) rows[y] = [];
+                rows[y].push({ x: item.transform[4], text: item.str.trim() });
+            });
+
+            Object.values(rows).forEach(rowItems => {
+                // ترتيب العناصر من اليمين لليسار أو حسب الظهور
+                rowItems.sort((a, b) => a.x - b.x);
+                const fullLine = rowItems.map(i => i.text).join(' ');
+                
+                // استخراج الأنماط: (سعر المستهلك) (سعر الصيدلي) (اسم الصنف)
+                const regex = /(\d+(?:\.\d+)?)\s+(\d+\.\d{2})\s+([^\d|]+?)(?=\s+\d+(?:\.\d+)?\s+\d+\.\d{2}|$)/g;
+                let match;
+                while ((match = regex.exec(fullLine)) !== null) {
+                    const pubPrice = parseFloat(match[1]);
+                    const pharmPrice = parseFloat(match[2]);
+                    const prodName = match[3].trim();
+                    if (prodName.length > 2 && !prodName.includes('المستهلك') && !prodName.includes('اورجا سوفت')) {
+                        extracted.push({ name: prodName, pharm: pharmPrice, pub: pubPrice });
+                    }
+                }
+            });
+        }
+
+        if (extracted.length > 0) {
+            // دمج الأصناف المستخرجة مع إزالة التكرار
+            const map = new Map();
+            [...products, ...extracted].forEach(item => map.set(normalizeArabic(item.name), item));
+            products = Array.from(map.values());
+            localStorage.setItem('pharmacy_products', JSON.stringify(products));
+            updateCounter();
+            statusMsg.textContent = `✅ تم استخراج وحفظ ${products.length} صنف بنجاح من الـ ${pdf.numPages} صفحة!`;
+        } else {
+            statusMsg.textContent = '⚠️ تم فحص الملف، تأكد من اختيار ملف القائمة الأصلي.';
+        }
+    } catch (err) {
+        statusMsg.textContent = '❌ حدث خطأ أثناء قراءة الملف.';
+        console.error(err);
+    }
+});
+</script>
+
+</body>
+</html>
